@@ -1,5 +1,5 @@
 {
-  "originHash" : "bb66ebb89125949e19a9972ba488f3d4e1d0cfb0b922023118a3c5b94bc7f512",
+  "originHash" : "7a23486706bb495ba94f543c1fc5cc12cf22ac3c66620e1b319e85afe8ec98b1",
   "pins" : [
     {
       "identity" : "swift-collections",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/langdon78/VLNetworkingClient",
       "state" : {
-        "revision" : "07678b25178abac7297e12b57a19b8b8b1ccf66c",
-        "version" : "0.1.3-alpha"
+        "revision" : "e9733dfd0f2421bf11cf3ae5bde5eed0cdb7d340",
+        "version" : "0.1.4-alpha"
       }
     },
     {
