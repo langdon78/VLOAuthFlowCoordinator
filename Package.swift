@@ -13,8 +13,6 @@ let package = Package(
             targets: ["VLOAuthFlowCoordinator"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/langdon78/VLNetworkingClient", .upToNextMajor(from: "0.1.4-alpha")),
-//        .package(path: "/Users/jameslangdon/GitProjects/VLNetworkingClient"),
         .package(url: "https://github.com/langdon78/VLOAuthProvider", .upToNextMajor(from: "0.1.0-alpha"))
     ],
     targets: [
@@ -23,7 +21,6 @@ let package = Package(
         .target(
             name: "VLOAuthFlowCoordinator",
             dependencies: [
-                .product(name: "VLNetworkingClient", package: "VLNetworkingClient"),
                 .product(name: "VLOAuthProvider", package: "VLOAuthProvider"),
             ]
         ),
