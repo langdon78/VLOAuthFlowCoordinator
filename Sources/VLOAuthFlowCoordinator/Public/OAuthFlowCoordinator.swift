@@ -33,13 +33,18 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         self.onSuccessfulAuthentication = onSuccessfulAuthentication
     }
     
-    public func startOAuthFlow() async throws {
+    public func startOAuthFlow(
+        prefersEphemeralWebBrowserSession: Bool = false
+    ) async throws {
         // First leg - Request a temporary token
         let requestToken = try await fetchRequestToken()
         
         // Second leg - User authorization
         let authorizationUrl = try await buildAuthorizationUrl(from: requestToken)
-        let verifier = try await authenticate(authorizationUrl)
+        let verifier = try await authenticate(
+            authorizationUrl,
+            prefersEphemeralWebBrowserSession: prefersEphemeralWebBrowserSession
+        )
         
         // Third leg - Exchange for an access token
         let accessToken = try await getAccessToken(with: verifier)
@@ -123,7 +128,10 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     }
     
     @MainActor
-    private func authenticate(_ authorizationUrl: URL) async throws -> OAuthVerifier {
+    private func authenticate(
+        _ authorizationUrl: URL,
+        prefersEphemeralWebBrowserSession: Bool
+    ) async throws -> OAuthVerifier {
         let callbackScheme = authConfiguration.callback.scheme
         
         return try await withCheckedThrowingContinuation { continuation in
@@ -156,7 +164,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
             }
             
             authSession?.presentationContextProvider = self
-            authSession?.prefersEphemeralWebBrowserSession = true
+            authSession?.prefersEphemeralWebBrowserSession = prefersEphemeralWebBrowserSession
             authSession?.start()
         }
     }
