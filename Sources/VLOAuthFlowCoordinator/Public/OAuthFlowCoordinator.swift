@@ -15,7 +15,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     private let authConfiguration: AuthConfiguration
     private let authenticationProvider: AuthenticationProvider
     private let networkProvider: NetworkProvider
-    private let oauthTokenStorageManager: OAuthTokenStorageManager
+    private let oauthTokenStorageManager: MultiUserOAuthTokenStorageManager = MultiUserOAuthTokenStorageManager(tokenStorageManager: OAuthTokenStorageManager(keychainManager: DefaultKeychainManager()))
     private var authSession: ASWebAuthenticationSession?
     private var onSuccessfulAuthentication: (() async throws -> Void)?
     
@@ -23,13 +23,11 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         authConfiguration: AuthConfiguration,
         authenticationProvider: AuthenticationProvider = OAuthProvider(),
         networkProvider: NetworkProvider,
-        oauthTokenStorageManager: OAuthTokenStorageManager = OAuthTokenStorageManager(),
         onSuccessfulAuthentication: (() async throws -> Void)? = nil
     ) {
         self.authConfiguration = authConfiguration
         self.authenticationProvider = authenticationProvider
         self.networkProvider = networkProvider
-        self.oauthTokenStorageManager = oauthTokenStorageManager
         self.onSuccessfulAuthentication = onSuccessfulAuthentication
     }
     
@@ -50,26 +48,33 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         let accessToken = try await getAccessToken(with: verifier)
         
         // Store access token for future requests
-        await storeAccessToken(accessToken)
+        try storeAccessToken(accessToken)
         
         // Call on success if provided
         try await onSuccessfulAuthentication?()
     }
     
-    public func hasValidTokens() -> Bool {
-        oauthTokenStorageManager.hasValidTokens()
+    public func hasValidTokens(for user: String) -> Bool {
+        oauthTokenStorageManager.hasValidTokens(for: user)
     }
     
-    public func clearToken() {
-        oauthTokenStorageManager.clearAllTokens()
+    public func clearTokens(for user: String) -> Bool {
+        oauthTokenStorageManager.clearAllTokens(for: user)
     }
     
-    public func getSignedRequest(from request: URLRequest) async throws -> URLRequest {
-        let oAuthParameters = await OAuthParameters(
+    public func saveTokens(for user: String) throws {
+        try oauthTokenStorageManager.saveAccessTokens(for: user)
+    }
+    
+    public func getSignedRequest(from request: URLRequest, for user: String? = nil) async throws -> URLRequest {
+        var accessToken = oauthTokenStorageManager.getAccessToken(for: user)
+        var accessTokenSecret = oauthTokenStorageManager.getAccessTokenSecret(for: user)
+
+        let oAuthParameters = OAuthParameters(
             consumerKey: authConfiguration.clientKey,
             consumerSecret: authConfiguration.clientSecret,
-            requestToken: oauthTokenStorageManager.getAccessToken(),
-            requestSecret: oauthTokenStorageManager.getAccessTokenSecret(),
+            requestToken: accessToken,
+            requestSecret: accessTokenSecret,
             signatureMethod: .hmac
         )
         return try await authenticationProvider.createSignedRequest(
@@ -105,7 +110,10 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         let requestTokenValue = requestToken.token
         let requestTokenSecretValue = requestToken.tokenSecret
         
-        oauthTokenStorageManager.saveRequestTokenSecret(requestTokenSecretValue)
+        let tokenSecretDidSave = oauthTokenStorageManager.saveRequestTokenSecret(requestTokenSecretValue)
+        if !tokenSecretDidSave {
+            throw OAuthFlowCooridnatorError.keychainError
+        }
         
         let authorizeRequest = URLRequest(url: authConfiguration.authorizationUrl)
         
@@ -191,9 +199,12 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         return accessToken
     }
     
-    private func storeAccessToken(_ accessToken: OAuthAccessToken) async {
-        oauthTokenStorageManager.saveAccessToken(accessToken.token)
-        oauthTokenStorageManager.saveAccessTokenSecret(accessToken.tokenSecret)
+    private func storeAccessToken(_ accessToken: OAuthAccessToken) throws {
+        let accessTokenDidSave = oauthTokenStorageManager.saveAccessToken(accessToken.token)
+        let accessTokenSecretDidSave = oauthTokenStorageManager.saveAccessTokenSecret(accessToken.tokenSecret)
+        if !(accessTokenDidSave && accessTokenSecretDidSave) {
+            throw OAuthFlowCooridnatorError.keychainError
+        }
     }
 
 }
@@ -201,8 +212,18 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
 extension OAuthFlowCoordinator: ASWebAuthenticationPresentationContextProviding {
     public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         // Return your app's window
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first ?? ASPresentationAnchor()
+        if let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first {
+            // First try to get an existing window
+            if let window = windowScene.windows.first {
+                return window
+            }
+            // Fallback to creating a new window with the window scene
+            return ASPresentationAnchor(windowScene: windowScene)
+        }
+        
+        // Fallback for when no window scene is available (shouldn't happen in normal circumstances)
+        fatalError("Unable to find a valid UIWindowScene for presenting authentication")
     }
 }
