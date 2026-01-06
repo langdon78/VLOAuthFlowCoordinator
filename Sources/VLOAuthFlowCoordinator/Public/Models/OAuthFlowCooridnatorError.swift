@@ -13,4 +13,5 @@ enum OAuthFlowCooridnatorError: Error {
     case malformedRequest
     case invalidCallbackUrl
     case unknownConfiguration
+    case keychainError
 }
