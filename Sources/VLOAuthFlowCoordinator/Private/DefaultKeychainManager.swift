@@ -1,5 +1,5 @@
 //
-//  KeychainHelper.swift
+//  DefaultKeychainManager.swift
 //  VLOAuthFlowCoordinator
 //
 //  Created by James Langdon on 8/18/25.
@@ -8,9 +8,9 @@
 import Security
 import Foundation
 
-class KeychainHelper {
+class DefaultKeychainManager: KeychainManager {
     
-    static func save(key: String, data: Data) -> Bool {
+    func save(key: String, data: Data) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
@@ -25,7 +25,7 @@ class KeychainHelper {
         return status == errSecSuccess
     }
     
-    static func load(key: String) -> Data? {
+    func load(key: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
@@ -42,7 +42,7 @@ class KeychainHelper {
         return nil
     }
     
-    static func delete(key: String) -> Bool {
+    func delete(key: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key
@@ -50,18 +50,5 @@ class KeychainHelper {
         
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess
-    }
-}
-
-// String convenience methods
-extension KeychainHelper {
-    static func save(key: String, string: String) -> Bool {
-        guard let data = string.data(using: .utf8) else { return false }
-        return save(key: key, data: data)
-    }
-    
-    static func loadString(key: String) -> String? {
-        guard let data = load(key: key) else { return nil }
-        return String(data: data, encoding: .utf8)
     }
 }
