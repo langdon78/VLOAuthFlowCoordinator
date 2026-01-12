@@ -16,8 +16,13 @@ actor DefaultKeychainManager: KeychainManager {
             kSecAttrAccount as String: key,
             kSecValueData as String: data
         ]
+        
         // Delete existing item first
-        try await delete(key: key)
+        do {
+            try await delete(key: key)
+        } catch {
+            DebugLogger.shared.error("Unable to find key for deletion", error: error, category: .keychain)
+        }
         
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             // Add new item
