@@ -7,21 +7,21 @@
 
 import Foundation
 
-protocol KeychainManager {
-    func save(key: String, data: Data) -> Bool
-    func load(key: String) -> Data?
-    func delete(key: String) -> Bool
+protocol KeychainManager: Actor {
+    func save(key: String, data: Data) async throws
+    func load(key: String) async throws -> Data?
+    func delete(key: String) async throws
 }
 
 // String convenience methods
 extension KeychainManager {
-    func save(key: String, string: String) -> Bool {
-        guard let data = string.data(using: .utf8) else { return false }
-        return save(key: key, data: data)
+    func save(key: String, string: String) async throws {
+        guard let data = string.data(using: .utf8) else { throw KeychainManagerError.unableToConvertStringToData(string) }
+        return try await save(key: key, data: data)
     }
     
-    func loadString(key: String) -> String? {
-        guard let data = load(key: key) else { return nil }
+    func loadString(key: String) async throws -> String? {
+        guard let data = try await load(key: key) else { throw KeychainManagerError.missingData(for: key) }
         return String(data: data, encoding: .utf8)
     }
 }
