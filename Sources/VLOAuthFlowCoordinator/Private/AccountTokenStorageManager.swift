@@ -44,8 +44,13 @@ actor AccountTokenStorageManager: AccountTokenStorage {
     
     // MARK: Clear Tokens
     func clearTokens() async throws {
-        try await tokenStorageManager.deleteToken(for: TokenType.accessToken.appendingAccountKey(accountKey))
-        try await tokenStorageManager.deleteToken(for: TokenType.accessTokenSecret.appendingAccountKey(accountKey))
+        // Only delete tokens if they exist
+        if try await getAccessToken() != nil {
+            try await tokenStorageManager.deleteToken(for: TokenType.accessToken.appendingAccountKey(accountKey))
+        }
+        if try await getAccessTokenSecret() != nil {
+            try await tokenStorageManager.deleteToken(for: TokenType.accessTokenSecret.appendingAccountKey(accountKey))
+        }
     }
     
     // MARK: Token Validation

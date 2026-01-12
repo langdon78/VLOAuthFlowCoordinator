@@ -11,7 +11,6 @@ import Foundation
 enum KeychainManagerError: Error, LocalizedError {
     case securityError(OSStatus)
     case unableToConvertStringToData(String)
-    case missingData(for: String)
     
     var errorMessage: String {
         switch self {
@@ -21,8 +20,6 @@ enum KeychainManagerError: Error, LocalizedError {
             } else {
                 return "Keychain error with status code: \(status)"
             }
-        case .missingData(for: let key):
-            return "Missing keychain data for key: \(key)"
         case .unableToConvertStringToData(let value):
             return "Unable to convert \(value) to Data"
         }

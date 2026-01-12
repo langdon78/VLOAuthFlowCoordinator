@@ -21,7 +21,7 @@ extension KeychainManager {
     }
     
     func loadString(key: String) async throws -> String? {
-        guard let data = try await load(key: key) else { throw KeychainManagerError.missingData(for: key) }
+        guard let data = try await load(key: key) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 }
