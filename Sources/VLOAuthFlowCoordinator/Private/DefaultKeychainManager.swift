@@ -8,24 +8,30 @@
 import Security
 import Foundation
 
-class DefaultKeychainManager: KeychainManager {
+actor DefaultKeychainManager: KeychainManager {
     
-    func save(key: String, data: Data) -> Bool {
+    func save(key: String, data: Data) async throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
             kSecValueData as String: data
         ]
-        
         // Delete existing item first
-        SecItemDelete(query as CFDictionary)
+        try await delete(key: key)
         
-        // Add new item
-        let status = SecItemAdd(query as CFDictionary, nil)
-        return status == errSecSuccess
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            // Add new item
+            let status = SecItemAdd(query as CFDictionary, nil)
+            
+            if status == errSecSuccess {
+                continuation.resume()
+            } else {
+                continuation.resume(throwing: KeychainManagerError.securityError(status))
+            }
+        }
     }
     
-    func load(key: String) -> Data? {
+    func load(key: String) async throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
@@ -33,22 +39,32 @@ class DefaultKeychainManager: KeychainManager {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
-        if status == errSecSuccess {
-            return result as? Data
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            if status == errSecSuccess {
+                continuation.resume(returning: result as? Data)
+            } else {
+                continuation.resume(throwing: KeychainManagerError.securityError(status))
+            }
         }
-        return nil
     }
     
-    func delete(key: String) -> Bool {
+    func delete(key: String) async throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key
         ]
         
-        let status = SecItemDelete(query as CFDictionary)
-        return status == errSecSuccess
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let status = SecItemDelete(query as CFDictionary)
+            
+            if status == errSecSuccess {
+                continuation.resume()
+            } else {
+                continuation.resume(throwing: KeychainManagerError.securityError(status))
+            }
+        }
     }
+    
 }
