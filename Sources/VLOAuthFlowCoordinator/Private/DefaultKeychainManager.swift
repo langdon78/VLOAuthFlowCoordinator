@@ -7,8 +7,15 @@
 
 import Security
 import Foundation
+import VLDebugLogger
 
 actor DefaultKeychainManager: KeychainManager {
+    
+    let logger: VLDebugLogger
+    
+    init() {
+        self.logger = VLDebugLogger(subsystem: "VLOAuthFlowCoordinator", category: .keychain)
+    }
     
     func save(key: String, data: Data) async throws {
         let query: [String: Any] = [
@@ -19,9 +26,11 @@ actor DefaultKeychainManager: KeychainManager {
         
         // Delete existing item first
         do {
-            try await delete(key: key)
+            if let _ = try await load(key: key) {
+                try await delete(key: key)
+            }
         } catch {
-            DebugLogger.shared.error("Unable to find key for deletion", error: error, category: .keychain)
+            logger.log(error, message: "Unable to find key for deletion", category: .keychain)
         }
         
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -47,7 +56,7 @@ actor DefaultKeychainManager: KeychainManager {
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
             var result: AnyObject?
             let status = SecItemCopyMatching(query as CFDictionary, &result)
-            if status == errSecSuccess {
+            if status == errSecSuccess || status == errSecItemNotFound {
                 continuation.resume(returning: result as? Data)
             } else {
                 continuation.resume(throwing: KeychainManagerError.securityError(status))

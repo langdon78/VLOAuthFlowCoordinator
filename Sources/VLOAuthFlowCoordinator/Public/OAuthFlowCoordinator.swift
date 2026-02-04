@@ -10,6 +10,8 @@ import VLOAuthProvider
 import SwiftUI
 import WebKit
 import AuthenticationServices
+import VLDebugLogger
+import Collections
 
 /// Coordinates the OAuth 1.0a authentication flow, managing token storage and authentication sessions.
 ///
@@ -37,6 +39,9 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     
     /// Provider for making network requests and parsing OAuth responses
     private let networkProvider: NetworkProvider
+    
+    /// Logger instance for debugging OAuth flow
+    private let logger: VLDebugLogger
     
     // MARK: - Token Storage
     
@@ -75,23 +80,26 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     ///   - networkProvider: Provider for making network requests and parsing responses
     ///   - activeAccountKey: Optional key identifying the active user account
     ///   - onSuccessfulAuthentication: Optional callback executed after successful authentication
+    ///   - logger: Logger instance for debugging (defaults to a new VLDebugLogger instance)
     public init(
         authConfiguration: AuthConfiguration,
         authenticationProvider: AuthenticationProvider = OAuthProvider(),
         networkProvider: NetworkProvider,
         activeAccountKey: String? = nil,
-        onSuccessfulAuthentication: (() async throws -> Void)? = nil
+        onSuccessfulAuthentication: (() async throws -> Void)? = nil,
+        logger: VLDebugLogger
     ) {
         self.authConfiguration = authConfiguration
         self.authenticationProvider = authenticationProvider
         self.networkProvider = networkProvider
         self.activeAccountKey = activeAccountKey
         self.onSuccessfulAuthentication = onSuccessfulAuthentication
+        self.logger = logger
         if let activeAccountKey {
             self.activeAccountTokenStorageManager = AccountTokenStorageManager(tokenStorageManager: OAuthTokenStorageManager(keychainManager: DefaultKeychainManager()), accountKey: activeAccountKey)
-            DebugLogger.shared.info("Initialized OAuthFlowCoordinator with active account: \(activeAccountKey)", category: .oauth)
+            logger.log("Initialized OAuthFlowCoordinator with active account: \(activeAccountKey)", category: .oauth, level: .info)
         } else {
-            DebugLogger.shared.info("Initialized OAuthFlowCoordinator with anonymous account", category: .oauth)
+            logger.log("Initialized OAuthFlowCoordinator with anonymous account", category: .oauth, level: .info)
         }
         self.anonymousTokenStorageManager = AccountTokenStorageManager(tokenStorageManager: OAuthTokenStorageManager(keychainManager: DefaultKeychainManager()), accountKey: OAuthFlowCoordinator.anonymousAccountKey)
     }
@@ -112,36 +120,36 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     public func startOAuthFlow(
         prefersEphemeralWebBrowserSession: Bool = false
     ) async throws {
-        DebugLogger.shared.info("Starting OAuth flow (ephemeral: \(prefersEphemeralWebBrowserSession))", category: .oauth)
+        logger.log("Starting OAuth flow (ephemeral: \(prefersEphemeralWebBrowserSession))", category: .oauth, level: .info)
         
         do {
             // First leg - Request a temporary token
-            DebugLogger.shared.debug("Step 1/4: Fetching request token", category: .oauth)
+            logger.log("Step 1/4: Fetching request token", category: .oauth, level: .debug)
             let requestToken = try await fetchRequestToken()
             
             // Second leg - User authorization
-            DebugLogger.shared.debug("Step 2/4: Building authorization URL", category: .oauth)
+            logger.log("Step 2/4: Building authorization URL", category: .oauth, level: .debug)
             let authorizationUrl = try await buildAuthorizationUrl(from: requestToken)
             
-            DebugLogger.shared.debug("Step 3/4: Presenting authorization UI", category: .oauth)
+            logger.log("Step 3/4: Presenting authorization UI", category: .oauth, level: .debug)
             let verifier = try await authenticate(
                 authorizationUrl,
                 prefersEphemeralWebBrowserSession: prefersEphemeralWebBrowserSession
             )
             
             // Third leg - Exchange for an access token
-            DebugLogger.shared.debug("Step 4/4: Exchanging verifier for access token", category: .oauth)
+            logger.log("Step 4/4: Exchanging verifier for access token", category: .oauth, level: .debug)
             let accessToken = try await getAccessToken(with: verifier)
             
             // Store access token for future requests
             try await storeAccessToken(accessToken)
             
-            DebugLogger.shared.info("OAuth flow completed successfully", category: .oauth)
+            logger.log("OAuth flow completed successfully", category: .oauth, level: .info)
             
             // Call on success if provided
             try await onSuccessfulAuthentication?()
         } catch {
-            DebugLogger.shared.error("OAuth flow failed", error: error, category: .oauth)
+            logger.log(error, message: "OAuth flow failed", category: .oauth, level: .error)
             throw error
         }
     }
@@ -152,7 +160,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     /// - Throws: Any keychain access errors
     public func activeAccountHasValidTokens() async throws -> Bool {
         let hasValidTokens = try await activeAccountTokenStorageManager?.hasValidTokens() ?? false
-        DebugLogger.shared.debug("Active account valid tokens check: \(hasValidTokens)", category: .oauth)
+        logger.log("Active account valid tokens check: \(hasValidTokens)", category: .oauth, level: .debug)
         return hasValidTokens
     }
     
@@ -160,7 +168,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     ///
     /// - Throws: Any keychain deletion errors
     public func clearActiveTokens() async throws {
-        DebugLogger.shared.info("Clearing active account tokens", category: .oauth)
+        logger.log("Clearing active account tokens", category: .oauth, level: .info)
         try await activeAccountTokenStorageManager?.clearTokens()
     }
     
@@ -168,7 +176,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     ///
     /// - Throws: Any keychain deletion errors
     public func clearAnonymousTokens() async throws {
-        DebugLogger.shared.info("Clearing anonymous tokens", category: .oauth)
+        logger.log("Clearing anonymous tokens", category: .oauth, level: .info)
         try await anonymousTokenStorageManager.clearTokens()
     }
     
@@ -179,14 +187,14 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     ///
     /// - Throws: Any keychain access or storage errors
     public func copyAnonymousTokensToActiveAccount() async throws {
-        DebugLogger.shared.info("Copying anonymous tokens to active account", category: .oauth)
+        logger.log("Copying anonymous tokens to active account", category: .oauth, level: .info)
         if let accessToken = try await anonymousTokenStorageManager.getAccessToken(),
            let accessTokenSecret = try await anonymousTokenStorageManager.getAccessTokenSecret() {
             try await activeAccountTokenStorageManager?.saveAccessToken(accessToken)
             try await activeAccountTokenStorageManager?.saveAccessTokenSecret(accessTokenSecret)
-            DebugLogger.shared.info("Successfully copied anonymous tokens to active account", category: .oauth)
+            logger.log("Successfully copied anonymous tokens to active account", category: .oauth, level: .info)
         } else {
-            DebugLogger.shared.warning("No anonymous tokens found to copy", category: .oauth)
+            logger.log("No anonymous tokens found to copy", category: .oauth, level: .warning)
         }
     }
     
@@ -206,7 +214,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
                 )
             }
         } catch {
-            DebugLogger.shared.error("Unable to retrieve access tokens from keychain", error: error, category: .keychain)
+            logger.log(error, message: "Unable to retrieve access tokens from keychain", category: .keychain, level: .error)
             return nil
         }
         return nil
@@ -223,7 +231,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     /// - Returns: A new URL request with OAuth signature headers added
     /// - Throws: Authentication errors if signing fails or tokens are missing
     public func getSignedRequest(from request: URLRequest, for user: String? = nil) async throws -> URLRequest {
-        DebugLogger.shared.debug("Creating signed request for URL: \(request.url?.absoluteString ?? "unknown")", category: .oauth)
+        logger.log("Creating signed request for URL: \(request.url?.absoluteString ?? "unknown")", category: .oauth, level: .debug)
         let oAuthParameters = OAuthParameters(
             consumerKey: authConfiguration.clientKey,
             consumerSecret: authConfiguration.clientSecret,
@@ -236,7 +244,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
             with: oAuthParameters,
             as: .header
         )
-        DebugLogger.shared.debug("Successfully created signed request", category: .oauth)
+        logger.log("Successfully created signed request", category: .oauth, level: .debug)
         return signedRequest
     }
     
@@ -250,7 +258,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     /// - Returns: An `OAuthRequestToken` containing the temporary token and secret
     /// - Throws: `OAuthFlowCooridnatorError.missingRequestToken` if the server doesn't return a token
     private func fetchRequestToken() async throws -> OAuthRequestToken {
-        DebugLogger.shared.debug("Requesting temporary token from: \(authConfiguration.requestTokenUrl.absoluteString)", category: .oauth)
+        logger.log("Requesting temporary token from: \(authConfiguration.requestTokenUrl.absoluteString)", category: .oauth, level: .debug)
         
         let requestTokenRequest = URLRequest(url: authConfiguration.requestTokenUrl)
         let oAuthParameters = OAuthParameters(
@@ -266,11 +274,11 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         )
         
         guard let requestToken = try await networkProvider.getRequestToken(from: request) else {
-            DebugLogger.shared.error("Failed to retrieve request token from server", category: .oauth)
+            logger.log(OAuthFlowCooridnatorError.missingRequestToken, message: "Failed to retrieve request token from server", category: .oauth, level: .error)
             throw OAuthFlowCooridnatorError.missingRequestToken
         }
         
-        DebugLogger.shared.info("Successfully fetched request token", category: .oauth)
+        logger.log("Successfully fetched request token", category: .oauth, level: .info)
         return requestToken
     }
     
@@ -288,7 +296,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         let requestTokenValue = requestToken.token
         let requestTokenSecretValue = requestToken.tokenSecret
         
-        DebugLogger.shared.debug("Building authorization URL with request token", category: .oauth)
+        logger.log("Building authorization URL with request token", category: .oauth, level: .debug)
         
         try await currentTokenManager.saveRequestTokenSecret(requestTokenSecretValue)
         
@@ -309,11 +317,11 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         )
         
         guard let url = request.url else {
-            DebugLogger.shared.error("Failed to construct authorization URL", category: .oauth)
+            logger.log(OAuthFlowCooridnatorError.malformedRequest, message: "Failed to construct authorization URL", category: .oauth, level: .error)
             throw OAuthFlowCooridnatorError.malformedRequest
         }
         
-        DebugLogger.shared.info("Built authorization URL: \(url.absoluteString)", category: .oauth)
+        logger.log("Built authorization URL: \(url.absoluteString)", category: .oauth, level: .info)
         return url
     }
     
@@ -335,21 +343,21 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     ) async throws -> OAuthVerifier {
         let callbackScheme = authConfiguration.callback.scheme
         
-        DebugLogger.shared.info("Presenting authentication session", category: .oauth)
+        logger.log("Presenting authentication session", category: .oauth, level: .info)
         
         return try await withCheckedThrowingContinuation { continuation in
             authSession = ASWebAuthenticationSession(
                 url: authorizationUrl,
                 callbackURLScheme: callbackScheme
             ) { [weak self] callbackURL, error in
+                guard let self else { return }
                 if let error = error {
-                    DebugLogger.shared.error("Authentication session failed", error: error, category: .oauth)
+                    logger.log(error, message: "Authentication session failed", category: .oauth, level: .error)
                     continuation.resume(throwing: error)
                     return
                 }
                 do {
                     guard
-                        let self,
                         let callbackURL = callbackURL,
                         callbackURL.scheme == callbackScheme,
                         callbackURL.host() == authConfiguration.callback.host(),
@@ -357,15 +365,15 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
                         let query = callbackURL.query(),
                         let oauthVerifier = try networkProvider.decodeVerifierResponse(from: query)
                     else {
-                        DebugLogger.shared.error("Invalid callback URL received", category: .oauth)
+                        logger.log(OAuthFlowCooridnatorError.invalidCallbackUrl, message: "Invalid callback URL received", category: .oauth, level: .error)
                         continuation.resume(throwing: OAuthFlowCooridnatorError.invalidCallbackUrl)
                         return
                     }
                     
-                    DebugLogger.shared.info("Successfully received authorization verifier", category: .oauth)
+                    logger.log("Successfully received authorization verifier", category: .oauth, level: .info)
                     continuation.resume(returning: oauthVerifier)
                 } catch {
-                    DebugLogger.shared.error("Failed to decode verifier response", error: error, category: .oauth)
+                    logger.log(error, message: "Failed to decode verifier response", category: .oauth, level: .error)
                     continuation.resume(throwing: error)
                 }
             }
@@ -385,7 +393,7 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     /// - Returns: An `OAuthAccessToken` containing the access token and secret
     /// - Throws: `OAuthFlowCooridnatorError.missingAccessToken` if the server doesn't return a token
     private func getAccessToken(with oauthVerifier: OAuthVerifier) async throws -> OAuthAccessToken {
-        DebugLogger.shared.debug("Exchanging verifier for access token", category: .oauth)
+        logger.log("Exchanging verifier for access token", category: .oauth, level: .debug)
         
         let oAuthParameters = OAuthParameters(
             consumerKey: authConfiguration.clientKey,
@@ -402,11 +410,11 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
         )
         
         guard let accessToken = try await networkProvider.getAccessToken(from: request) else {
-            DebugLogger.shared.error("Failed to retrieve access token from server", category: .oauth)
+            logger.log(OAuthFlowCooridnatorError.missingAccessToken, message: "Failed to retrieve access token from server", category: .oauth, level: .error)
             throw OAuthFlowCooridnatorError.missingAccessToken
         }
         
-        DebugLogger.shared.info("Successfully obtained access token", category: .oauth)
+        logger.log("Successfully obtained access token", category: .oauth, level: .info)
         return accessToken
     }
     
@@ -415,10 +423,10 @@ public class OAuthFlowCoordinator: NSObject, @unchecked Sendable {
     /// - Parameter accessToken: The access token to store
     /// - Throws: Keychain storage errors
     private func storeAccessToken(_ accessToken: OAuthAccessToken) async throws {
-        DebugLogger.shared.debug("Storing access token in keychain", category: .oauth)
+        logger.log("Storing access token in keychain", category: .oauth, level: .debug)
         try await currentTokenManager.saveAccessToken(accessToken.token)
         try await currentTokenManager.saveAccessTokenSecret(accessToken.tokenSecret)
-        DebugLogger.shared.info("Successfully stored access token", category: .oauth)
+        logger.log("Successfully stored access token", category: .oauth, level: .info)
     }
 
 }
