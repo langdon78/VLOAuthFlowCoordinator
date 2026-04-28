@@ -1,5 +1,5 @@
 {
-  "originHash" : "5a9a6b8ac7405fb08b0e012396a8b48c5feb46b4a40401e318bbbbedfed0f33c",
+  "originHash" : "9d4418b4f238b6902bec2384a430df9562b31408a2ba6c52eafe1303d71ce172",
   "pins" : [
     {
       "identity" : "swift-collections",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "8c0c0a8b49e080e54e5e328cc552821ff07cd341",
         "version" : "1.2.1"
+      }
+    },
+    {
+      "identity" : "vldebuglogger",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/langdon78/VLDebugLogger",
+      "state" : {
+        "revision" : "38676f86e9f6329c8932cf3f86c913974f3503c7",
+        "version" : "0.1.0"
       }
     },
     {
