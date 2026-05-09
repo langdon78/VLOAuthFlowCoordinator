@@ -5,26 +5,27 @@
 //  Created by James Langdon on 8/18/25.
 //
 
-import Security
 import Foundation
 import VLDebugLogger
 
+#if canImport(Security)
+import Security
+
 actor DefaultKeychainManager: KeychainManager {
-    
+
     let logger: VLDebugLogger
-    
+
     init() {
         self.logger = VLDebugLogger(subsystem: "VLOAuthFlowCoordinator", category: .keychain)
     }
-    
+
     func save(key: String, data: Data) async throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
             kSecValueData as String: data
         ]
-        
-        // Delete existing item first
+
         do {
             if let _ = try await load(key: key) {
                 try await delete(key: key)
@@ -32,11 +33,9 @@ actor DefaultKeychainManager: KeychainManager {
         } catch {
             logger.log(error, message: "Unable to find key for deletion", category: .keychain)
         }
-        
+
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            // Add new item
             let status = SecItemAdd(query as CFDictionary, nil)
-            
             if status == errSecSuccess {
                 continuation.resume()
             } else {
@@ -44,7 +43,7 @@ actor DefaultKeychainManager: KeychainManager {
             }
         }
     }
-    
+
     func load(key: String) async throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -52,7 +51,7 @@ actor DefaultKeychainManager: KeychainManager {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        
+
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
             var result: AnyObject?
             let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -63,16 +62,15 @@ actor DefaultKeychainManager: KeychainManager {
             }
         }
     }
-    
+
     func delete(key: String) async throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key
         ]
-        
+
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let status = SecItemDelete(query as CFDictionary)
-            
             if status == errSecSuccess {
                 continuation.resume()
             } else {
@@ -80,5 +78,16 @@ actor DefaultKeychainManager: KeychainManager {
             }
         }
     }
-    
 }
+
+#else
+
+// Linux stub — Keychain is not available; the bot uses personal access tokens directly.
+actor DefaultKeychainManager: KeychainManager {
+    init() {}
+    func save(key: String, data: Data) async throws { throw KeychainManagerError.platformNotSupported }
+    func load(key: String) async throws -> Data? { throw KeychainManagerError.platformNotSupported }
+    func delete(key: String) async throws { throw KeychainManagerError.platformNotSupported }
+}
+
+#endif

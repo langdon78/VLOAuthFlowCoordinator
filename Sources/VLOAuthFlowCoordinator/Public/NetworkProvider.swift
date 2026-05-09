@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public protocol NetworkProvider {
     func getRequestToken(from request: URLRequest) async throws -> OAuthRequestToken?
