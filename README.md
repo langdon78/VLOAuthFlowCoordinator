@@ -13,9 +13,9 @@ A Swift package that simplifies OAuth 1.0a authentication flows for iOS and macO
 
 ## Requirements
 
-- iOS 18.0+ / macOS 14.0+ / tvOS 16.0+ / watchOS 6.0+
+- iOS 26.0+ / macOS 26.0+ / tvOS 16.0+ / watchOS 6.0+
 - Swift 6.2+
-- Xcode 16.0+
+- Xcode 26.0+
 
 ## Installation
 
@@ -25,7 +25,7 @@ Add the following to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/langdon78/VLOAuthFlowCoordinator", .upToNextMajor(from: "0.1.0"))
+    .package(url: "https://github.com/langdon78/VLOAuthFlowCoordinator", .upToNextMinor(from: "0.4.1"))
 ]
 ```
 
